@@ -16,16 +16,12 @@
 
 package io.plaidapp.ui
 
-import android.animation.Animator
-import android.animation.AnimatorListenerAdapter
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.ActivityOptions
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.graphics.drawable.AnimatedVectorDrawable
 import android.os.Bundle
 import android.text.Annotation
@@ -39,13 +35,11 @@ import android.transition.TransitionManager
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import android.view.ViewAnimationUtils
 import android.view.ViewGroup
 import android.view.ViewStub
 import android.view.WindowInsets
 import android.widget.CheckBox
 import android.widget.FrameLayout
-import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -58,7 +52,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.Observer
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
@@ -67,9 +60,6 @@ import com.bumptech.glide.util.ViewPreloadSizeProvider
 import io.plaidapp.R
 import io.plaidapp.core.dagger.qualifier.IsPocketInstalled
 import io.plaidapp.core.data.prefs.SourcesRepository
-import io.plaidapp.core.designernews.data.poststory.PostStoryService
-import io.plaidapp.core.designernews.data.poststory.PostStoryService.BROADCAST_ACTION_FAILURE
-import io.plaidapp.core.designernews.data.poststory.PostStoryService.BROADCAST_ACTION_SUCCESS
 import io.plaidapp.core.dribbble.data.api.model.Shot
 import io.plaidapp.core.feed.FeedAdapter
 import io.plaidapp.core.feed.FeedProgressUiModel
@@ -81,11 +71,9 @@ import io.plaidapp.core.ui.filter.FilterAnimator
 import io.plaidapp.core.ui.filter.SourcesHighlightUiModel
 import io.plaidapp.core.ui.filter.SourcesUiModel
 import io.plaidapp.core.ui.recyclerview.InfiniteScrollListener
-import io.plaidapp.core.ui.transitions.FabTransform
 import io.plaidapp.core.util.Activities
 import io.plaidapp.core.util.AnimUtils
 import io.plaidapp.core.util.ColorUtils
-import io.plaidapp.core.util.ShortcutHelper
 import io.plaidapp.core.util.ViewUtils
 import io.plaidapp.core.util.drawableToBitmap
 import io.plaidapp.core.util.event.Event
@@ -104,12 +92,11 @@ class HomeActivity : AppCompatActivity() {
 
     private var columns = 0
     private var filtersAdapter = FilterAdapter()
-    private lateinit var layoutManager: GridLayoutManager
+    private lateinit var gridLayoutManager: GridLayoutManager
     private lateinit var drawer: DrawerLayout
 
     private lateinit var toolbar: Toolbar
     private lateinit var grid: RecyclerView
-    private lateinit var fab: ImageButton
     private lateinit var loading: ProgressBar
     private lateinit var feedAdapter: FeedAdapter
     private lateinit var filtersList: RecyclerView
@@ -128,10 +115,6 @@ class HomeActivity : AppCompatActivity() {
     @IsPocketInstalled
     @JvmField
     var pocketInstalled = false
-
-    private val fabPosting by lazy {
-        findViewById<ViewStub>(R.id.stub_posting_progress).inflate() as ImageButton
-    }
 
     private val noFiltersEmptyText by lazy {
         val view = findViewById<ViewStub>(R.id.stub_no_filters).inflate() as TextView
@@ -188,8 +171,8 @@ class HomeActivity : AppCompatActivity() {
             // toolbar is laid out in front of the grid but when we scroll, we lower it's elevation
             // to allow the content to pass in front (and reset when scrolled to top of the grid)
             if (newState == RecyclerView.SCROLL_STATE_IDLE &&
-                layoutManager.findFirstVisibleItemPosition() == 0 &&
-                layoutManager.findViewByPosition(0)!!.top == grid.paddingTop &&
+                gridLayoutManager.findFirstVisibleItemPosition() == 0 &&
+                gridLayoutManager.findViewByPosition(0)!!.top == grid.paddingTop &&
                 toolbar.translationZ != 0f
             ) {
                 // at top, reset elevation
@@ -198,60 +181,6 @@ class HomeActivity : AppCompatActivity() {
                 // grid scrolled, lower toolbar to allow content to pass in front
                 toolbar.translationZ = -1f
             }
-        }
-    }
-
-    private val postStoryResultReceiver: BroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                BROADCAST_ACTION_SUCCESS -> {
-                    // success animation
-                    (getDrawable(R.drawable.avd_upload_complete) as AnimatedVectorDrawable?)?.also {
-                        fabPosting.setImageDrawable(it)
-                        it.start()
-                        fabPosting.postDelayed(
-                            { fabPosting.visibility = View.GONE },
-                            2100
-                        ) // length of R.drawable.avd_upload_complete
-                    }
-
-                    // FIXME: This can not possibly work as EXTRA_NEW_STORY passes in an int.
-                    /*
-                    // actually add the story to the grid
-                    val newStory =
-                        intent.getParcelableExtra<Story>(PostStoryService.EXTRA_NEW_STORY)
-
-                    val items = getPlaidItemsForDisplayExpanded(
-                        feedAdapter.items, listOf<Story>(newStory), columns
-                    )
-                    feedAdapter.items = items
-                    */
-                }
-                BROADCAST_ACTION_FAILURE -> {
-                    // failure animation
-                    (getDrawable(R.drawable.avd_upload_error) as AnimatedVectorDrawable?)?.also {
-                        fabPosting.setImageDrawable(it)
-                        it.start()
-                    }
-                    // remove the upload progress 'fab' and reshow the regular one
-                    fabPosting.animate()
-                        .alpha(0f)
-                        .rotation(90f)
-                        .setStartDelay(2000L) // leave error on screen briefly
-                        .setDuration(300L)
-                        .setInterpolator(AnimUtils.getFastOutSlowInInterpolator(this@HomeActivity))
-                        .setListener(object : AnimatorListenerAdapter() {
-                            override fun onAnimationEnd(animation: Animator) {
-                                fabPosting.apply {
-                                    visibility = View.GONE
-                                    alpha = 1f
-                                    rotation = 0f
-                                }
-                            }
-                        })
-                }
-            }
-            unregisterPostStoryResultListener()
         }
     }
 
@@ -339,8 +268,6 @@ class HomeActivity : AppCompatActivity() {
         drawer = findViewById(R.id.drawer)
         toolbar = findViewById(R.id.toolbar)
         grid = findViewById(R.id.grid)
-        fab = findViewById(R.id.fab)
-        fab.setOnClickListener { fabClick() }
         filtersList = findViewById(R.id.filters)
         loading = findViewById(android.R.id.empty)
 
@@ -348,7 +275,7 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun setupGrid() {
-        layoutManager = GridLayoutManager(this@HomeActivity, columns).apply {
+        gridLayoutManager = GridLayoutManager(this@HomeActivity, columns).apply {
             spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
                 override fun getSpanSize(position: Int): Int {
                     return feedAdapter.getItemColumnSpan(position)
@@ -356,7 +283,7 @@ class HomeActivity : AppCompatActivity() {
             }
         }
         val infiniteScrollListener =
-            object : InfiniteScrollListener(layoutManager) {
+            object : InfiniteScrollListener(gridLayoutManager) {
                 override fun onLoadMore() {
                     viewModel.loadData()
                 }
@@ -376,6 +303,7 @@ class HomeActivity : AppCompatActivity() {
         )
 
         with(grid) {
+            layoutManager = gridLayoutManager
             adapter = feedAdapter
             addOnScrollListener(toolbarElevation)
             addOnScrollListener(infiniteScrollListener)
@@ -389,8 +317,6 @@ class HomeActivity : AppCompatActivity() {
             itemAnimator = HomeGridItemAnimator()
             addOnScrollListener(shotPreloader)
         }
-
-        layoutManager = grid.layoutManager as GridLayoutManager
     }
 
     private fun handleDrawerInsets(insets: WindowInsets) {
@@ -409,20 +335,6 @@ class HomeActivity : AppCompatActivity() {
             grid.paddingRight + insets.systemWindowInsetRight, // landscape
             grid.paddingBottom + insets.systemWindowInsetBottom
         )
-
-        // inset the fab for the navbar
-        val lpFab = (fab.layoutParams as ViewGroup.MarginLayoutParams).apply {
-            bottomMargin += insets.systemWindowInsetBottom // portrait
-            rightMargin += insets.systemWindowInsetRight // landscape
-        }
-        fab.layoutParams = lpFab
-
-        val postingStub = findViewById<View>(R.id.stub_posting_progress)
-        val lpPosting = (postingStub.layoutParams as ViewGroup.MarginLayoutParams).apply {
-            bottomMargin += insets.systemWindowInsetBottom // portrait
-            rightMargin += insets.systemWindowInsetRight // landscape
-        }
-        postingStub.layoutParams = lpPosting
 
         // we place a background behind the status bar to combine with it's semi-transparent
         // color to get the desired appearance.  Set it's height to the status bar height
@@ -558,7 +470,6 @@ class HomeActivity : AppCompatActivity() {
                     startActivity(intentTo(Activities.DesignerNews.Login))
                 } else {
                     viewModel.logoutFromDesignerNews()
-                    ShortcutHelper.disablePostShortcut(this)
                     // TODO something better than a toast
                     Toast.makeText(
                         applicationContext, R.string.designer_news_logged_out,
@@ -604,82 +515,10 @@ class HomeActivity : AppCompatActivity() {
                     }
                 }
             }
-            RC_NEW_DESIGNER_NEWS_STORY -> when (resultCode) {
-                Activities.DesignerNews.PostStory.RESULT_DRAG_DISMISSED -> {
-                    // need to reshow the FAB as there's no shared element transition
-                    showFab()
-                    unregisterPostStoryResultListener()
-                }
-                Activities.DesignerNews.PostStory.RESULT_POSTING -> showPostingProgress()
-                else -> unregisterPostStoryResultListener()
-            }
-            RC_NEW_DESIGNER_NEWS_LOGIN -> if (resultCode == Activity.RESULT_OK) {
-                showFab()
-            }
         }
     }
 
-    private fun fabClick() {
-        if (viewModel.isDesignerNewsUserLoggedIn()) {
-            val intent = intentTo(Activities.DesignerNews.PostStory)
-            FabTransform.addExtras(
-                intent, ColorUtils.getThemeColor(
-                    this, R.attr.colorPrimary
-                ), R.drawable.ic_add_dark
-            )
-            intent.putExtra(PostStoryService.EXTRA_BROADCAST_RESULT, true)
-            registerPostStoryResultListener()
-            val options = ActivityOptions.makeSceneTransitionAnimation(
-                this, fab,
-                getString(R.string.transition_new_designer_news_post)
-            )
-            startActivityForResult(intent, RC_NEW_DESIGNER_NEWS_STORY, options.toBundle())
-        } else {
-            val intent = intentTo(Activities.DesignerNews.Login)
-            FabTransform.addExtras(
-                intent, ColorUtils.getThemeColor(
-                    this, R.attr.colorPrimary
-                ), R.drawable.ic_add_dark
-            )
-            val options = ActivityOptions.makeSceneTransitionAnimation(
-                this, fab,
-                getString(R.string.transition_designer_news_login)
-            )
-            startActivityForResult(intent, RC_NEW_DESIGNER_NEWS_LOGIN, options.toBundle())
-        }
-    }
-
-    internal fun registerPostStoryResultListener() {
-        val intentFilter = IntentFilter()
-        intentFilter.addAction(BROADCAST_ACTION_SUCCESS)
-        intentFilter.addAction(BROADCAST_ACTION_FAILURE)
-        LocalBroadcastManager.getInstance(this)
-            .registerReceiver(postStoryResultReceiver, intentFilter)
-    }
-
-    internal fun unregisterPostStoryResultListener() {
-        LocalBroadcastManager.getInstance(this).unregisterReceiver(postStoryResultReceiver)
-    }
-
-    internal fun revealPostingProgress() {
-        ViewAnimationUtils.createCircularReveal(
-            fabPosting,
-            fabPosting.pivotX.toInt(),
-            fabPosting.pivotY.toInt(),
-            0f,
-            (fabPosting.width / 2).toFloat()
-        ).apply {
-            duration = 600L
-            interpolator = AnimUtils.getFastOutLinearInInterpolator(this@HomeActivity)
-        }.start()
-
-        (getDrawable(R.drawable.avd_uploading) as AnimatedVectorDrawable?)?.also {
-            fabPosting.setImageDrawable(it)
-            it.start()
-        }
-    }
-
-    internal fun checkEmptyState() {
+    private fun checkEmptyState() {
         if (feedAdapter.items.isEmpty()) {
             // if grid is empty check whether we're loading or if no filters are selected
             if (sourcesRepository.getActiveSourcesCount() > 0 && connectivityChecker != null) {
@@ -695,31 +534,6 @@ class HomeActivity : AppCompatActivity() {
         } else {
             loading.visibility = View.GONE
             setNoFiltersEmptyTextVisibility(View.GONE)
-        }
-    }
-
-    private fun showPostingProgress() {
-        fabPosting.visibility = View.VISIBLE
-        // if stub has just been inflated then it will not have been laid out yet
-        if (fabPosting.isLaidOut) {
-            revealPostingProgress()
-        } else {
-            fabPosting.addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
-                override fun onLayoutChange(
-                    v: View,
-                    l: Int,
-                    t: Int,
-                    r: Int,
-                    b: Int,
-                    oldL: Int,
-                    oldT: Int,
-                    oldR: Int,
-                    oldB: Int
-                ) {
-                    fabPosting.removeOnLayoutChangeListener(this)
-                    revealPostingProgress()
-                }
-            })
         }
     }
 
@@ -762,23 +576,6 @@ class HomeActivity : AppCompatActivity() {
                     .setDuration(900).interpolator =
                     AnimUtils.getFastOutSlowInInterpolator(this@HomeActivity)
             }
-        }
-    }
-
-    private fun showFab() {
-        fab.apply {
-            alpha = 0f
-            scaleX = 0f
-            scaleY = 0f
-            translationY = (fab.height / 2).toFloat()
-            animate()
-                .alpha(1f)
-                .scaleX(1f)
-                .scaleY(1f)
-                .translationY(0f)
-                .setDuration(300L)
-                .setInterpolator(AnimUtils.getLinearOutSlowInInterpolator(this@HomeActivity))
-                .start()
         }
     }
 
@@ -846,7 +643,6 @@ class HomeActivity : AppCompatActivity() {
     companion object {
 
         private const val RC_SEARCH = 0
-        private const val RC_NEW_DESIGNER_NEWS_STORY = 4
         private const val RC_NEW_DESIGNER_NEWS_LOGIN = 5
     }
 }

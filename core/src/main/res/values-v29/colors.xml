@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Copyright 2017 Google Inc.
+  Copyright (c) 2019 Google Inc.
 
   Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
   in compliance with the License. You may obtain a copy of the License at
@@ -13,9 +13,9 @@
   the License.
   -->
 
-<shape
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
-    <solid android:color="@color/light_grey" />
-    <size android:width="44dp" android:height="44dp" />
-</shape>
+<resources>
+
+    <!-- common colours -->
+    <color name="nav_bar">@android:color/transparent</color>
+
+</resources>
